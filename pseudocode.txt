@@ -1,0 +1,63 @@
+//things to initialize and libraries to import:
+1. lcd
+2. wifi network
+3. distance sensor pins
+4. relay pins
+5. timing
+
+void setup() {
+1. init serial console
+2. init the lcd
+3. init the network
+ - check the wifi module
+ - check the wifi module firmware version
+ - attempt connection
+ - if connection ok - start the basic web server
+ - print the network status to serial console and the lcd
+4. init the sensor pins
+5. init the relay pins
+}
+
+void loop() {
+1. setup the web server and monitor periodicaly the network status (PO4TI PYLNA MYGLA)
+2. sensor - relay loop:
+ - assign the result from sensor function (defined outside of loop function),
+   as a value of a variable called "distance"
+   //in case something wrong with sensor:
+ - if (distance is 0 or lower) || (distance >= tank height) => relay pin set to HIGH (relay contacts are open, pump is off)
+   //in case the water level is at desired maximum:
+ - else if (distance <= 10cm) => relay pin set to HIGH (relay contacts are open, pump is off)
+   //in all other cases pump is turned on:
+ - else => relay pin set to LOW (relay contacts are closed, pump is on)
+ 
+ //serial console and lcd display showing the measured distance and the status of the relay:
+3. serial console & lcd loop:
+ - if ((distance is 0 or lower) || (distance >= tank height))  && (relay pin state == HIGH) => serial console print Xcm - out of range, pump off, and call lcdSensorOut() function
+ - else if (distance <= 10cm) && (relay pin state == HIGH) => serial console print Xcm - tank full, pump off, and call lcdSensorFull() function
+ - else serial console print Xcm - tank filling, pump on, and call lcdSensorFilling() function
+ 
+ TO DO HERE: Find a way to implement a timer function to initiate #1 and #2 for 2 min (120000 ms) then wait for 1 h (3600000 ms) without pausing the entire program!!!!!
+ 
+}
+
+// LCD FUNCTIONS:
+1. lcd init message at arduino startup.
+2. lcd connecting  message while trying to connect to the network
+3. lcd connect success message
+4. lcd wifi module error message
+5. lcd wifi module firmware update message
+6. lcd out of range message
+7. lcd tank full message
+8. lcd tank filling message
+
+// NETWORK FUNCTIONS:
+1. get ip address after connection success
+2. get the ssid of the network and the rssi of the signal
+
+// SERVER FUNCTIONS:
+1. running a webpage with relay pin status and manual turning on/off of the pump (CHASTICHNO RABOTESHTO, HTML + JAVA SCRIPT + AJAX V C++ - super kombinaciq za noobs, kato men)
+
+// SENSOR FUNCTION:
+1. turn raw data from sensor into distance in cm
+
+TO DO: OPTIMIZIRANE NA TAIA CQLATA BOZA DET SYM NACVYKAL
