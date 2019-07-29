@@ -50,6 +50,8 @@ void loop() {
 7. lcd tank full message
 8. lcd tank filling message
 
+TO DO HERE: CREATE A VIRT. BUFFER FOR THE DISPLAY!!!
+
 // NETWORK FUNCTIONS:
 1. get ip address after connection success
 2. get the ssid of the network and the rssi of the signal
