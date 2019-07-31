@@ -1,4 +1,4 @@
-//things to initialize and libraries to import:
+//set pins and import libraries:
 1. lcd
 2. wifi network
 3. distance sensor pins
@@ -49,6 +49,7 @@ void loop() {
 6. lcd out of range message
 7. lcd tank full message
 8. lcd tank filling message
+9. lcd waiting message
 
 TO DO HERE: CREATE A VIRT. BUFFER FOR THE DISPLAY!!!
 
