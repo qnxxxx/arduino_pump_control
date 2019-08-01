@@ -34,7 +34,7 @@ int relayState = HIGH;
 // Assign timing for the loop:
 unsigned long lastRun = 0;          // will store last time Sensor was updated
 long onTime = 5000;                 // set milliseconds of on-time 
-long offTime = 20000;               // set milliseconds of off-time
+long offTime = 30000;               // set milliseconds of off-time
 
 
 
@@ -170,9 +170,9 @@ void loop() {
       Serial.println("cm - filling");
       Serial.println("PUMP: ON ");
       lcdSensorFilling();
+      lastRun = currentMillis;
     }
     
-    lastRun = currentMillis;
     digitalWrite(relayPin, relayState);
   } 
   else if (currentMillis >= lastRun + offTime) {
