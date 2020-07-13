@@ -30,12 +30,6 @@ const int echoPin = 11;
 const int relayPin = 10;
 int relayState = HIGH;
 
-// :::::::::: Timing ::::::::::
-// Assign timing for the loop:
-unsigned long lastRun = 0;          // will store last time Sensor was updated
-long onTime = 5000;                 // set milliseconds of on-time 
-long offTime = 30000;               // set milliseconds of off-time
-
 
 
 void setup() {
@@ -61,9 +55,10 @@ void setup() {
   
   // Check WiFi module firmware version:
   String fv = WiFi.firmwareVersion();
-  if (fv < "1.0.0") {
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
     Serial.println("Please upgrade the firmware");
     lcdNetStatusWiFiModuleFirmware();
+    delay(10000);
   }
 
   // Attempt to connect to Wifi network:
@@ -315,9 +310,9 @@ void showWebPage(WiFiClient client) {
   // PUMP relay:
   client.print("<tr><td>PUMP</td><td>");
   if (digitalRead(relayPin)) {
-    client.print("<font style='color:green;'>ON</font>");
-  } else {
     client.print("<font style='color:red;'>OFF</font>");
+  } else {
+    client.print("<font style='color:green;'>ON</font>");
   }
   client.println("</td><td><a href='/relay/on'>ON</a> / <a href='/relay/off'>OFF</a></td></tr>");
 
@@ -329,9 +324,9 @@ void showWebPage(WiFiClient client) {
 
 void performRequest(String line) {
   if (line.endsWith("GET /relay/on")) {
-    digitalWrite(relayPin, HIGH);
-  } else if (line.endsWith("GET /relay/off")) {
     digitalWrite(relayPin, LOW);
+  } else if (line.endsWith("GET /relay/off")) {
+    digitalWrite(relayPin, HIGH);
   }
 }
 
