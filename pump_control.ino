@@ -25,6 +25,10 @@ WiFiServer server(80);        // start the basic web server
 const int trigPin = 12;
 const int echoPin = 11;
 
+// Define variables:
+long duration;
+int distance;
+
 // :::::::::: Pump relay ::::::::::
 // Assign pin numbers and state:
 const int relayPin = 10;
@@ -96,10 +100,6 @@ void setup() {
 void loop() {
   // :::::::::: NETWORKING ::::::::::
   
-  // check the network connection once every 10 seconds:
-  //delay(10000);
-  //printCurrentNet();
-
   // Serial to Server:
   WiFiClient client = server.available();
   if (client) {
@@ -137,46 +137,38 @@ void loop() {
     Serial.println("Client disconnected");
   }
   
-  // :::::::::: SENSOR/RELAY ::::::::::
-  unsigned long currentMillis = millis();
+  // :::::::::: PUMP CONTROL ::::::::::
   
-  // Change to desired distance in cm:
-  if (currentMillis >= lastRun + onTime) {
-    int dist = sensorReadDistance();
-
-    if (dist >= 20 || dist <= 0) {
-      relayState = HIGH;
-      Serial.print(dist);
-      Serial.println("cm - out of range ");
-      Serial.println("PUMP: OFF");
-      lcdSensorOut();
-
-    }
-    else if (dist <= 10) {
-      relayState = HIGH;
-      Serial.print(dist);
-      Serial.println("cm - tank full");
-      Serial.println("PUMP: OFF ");
-      lcdSensorFull();
-    } 
-    else  {
-      relayState = LOW;
-      Serial.print(dist);
-      Serial.println("cm - filling");
-      Serial.println("PUMP: ON ");
-      lcdSensorFilling();
-      lastRun = currentMillis;
-    }
-    
-    digitalWrite(relayPin, relayState);
-  } 
-  else if (currentMillis >= lastRun + offTime) {
+  // Distance readout:
+  int dist = sensorReadDistance();
+  
+  // Change the desired distances in cm:
+  if (dist > 200 || dist <= 0) {
     relayState = HIGH;
-    digitalWrite(relayPin, relayState);
-    lastRun = currentMillis;
-    Serial.println("PUMP: WAITING");
-    lcdSensorWaiting();
+    Serial.print(dist);
+    Serial.println("cm - out of range ");
+    Serial.println("PUMP: OFF");
+    lcdSensorOut();
   }
+
+  else if (dist <= 20) {
+    relayState = HIGH;
+    Serial.print(dist);
+    Serial.println("cm - tank full");
+    Serial.println("PUMP: OFF ");
+    lcdSensorFull();
+ }
+
+  else {
+    relayState = LOW;
+    Serial.print(dist);
+    Serial.println("cm - filling");
+    Serial.println("PUMP: ON ");
+    lcdSensorFilling();
+  }
+
+  digitalWrite(relayPin, relayState);
+  
 }
 
 
@@ -266,15 +258,6 @@ void lcdSensorFilling() {
   lcd.print(F("PUMP: ON"));
 }
 
-void lcdSensorWaiting() { 
-  lcd.clear();
-  lcd.setRGB(255,255,0);
-  lcd.setCursor(3,0);
-  lcd.print(F("WAITING..."));
-  lcd.setCursor(3,1);
-  lcd.print(F("PUMP: OFF"));
-}
-
 // :::::::::: NETWORK FUNCTIONS ::::::::::
 void printWifiData() {
   // print your board's IP address:
@@ -332,15 +315,16 @@ void performRequest(String line) {
 
 // :::::::::: SENSOR FUNCTIONS ::::::::::
 int sensorReadDistance() {
-  //initialize distance sensor:
-  long duration, distance;
+  // Clear the trigPin:
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
+  // Send signal:
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-  //take a reading
+  // Take a reading:
   duration = pulseIn(echoPin, HIGH);
-  distance = (duration/2)/29.1;
+  // Calculate and return the distance:
+  distance = (duration/2)/29.154;
   return distance;
 }
