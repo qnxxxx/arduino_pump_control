@@ -1,0 +1,2 @@
+#define SECRET_SSID "|WIFI SSID|"
+#define SECRET_PASS "|WIFI PASSWORD|"
