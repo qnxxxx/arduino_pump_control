@@ -33,23 +33,31 @@ const int echoPin = 11;
 // Define variables:
 int distance, duration;
 
+// Last sonar reading:
+int lastSonarReading = 0;
+
+// Sonar status variable:
+char16_t state = "idle";
+
 // :::::::::: PUMP RELAY SETUP ::::::::::
 // Assign pin numbers and state:
 const int pumpRelayPin = 9;
 int pumpRelayState = HIGH;
+boolean pumpOnFlag = false;
 
 // :::::::::: VALVE RELAY SETUP ::::::::::
 // Assign pin numbers and state:
 const int valveRelayPin = 10;
 int valveRelayState = HIGH;
+boolean valveOnFlag = false;
 
 // :::::::::: PUMP TIMIER SETUP ::::::::::
 // On and Off durations:
-const unsigned long pumpOnDuration = 120;         // set seconds of on-time 120; 365 pits
-const unsigned long pumpOffDuration = 3600;       // set seconds of off-time 36000; 2684 pits
+//const unsigned long pumpOnDuration = 10;         // set seconds of on-time 120
+//const unsigned long pumpOffDuration = 20;       // set seconds of off-time 3600 || 7200
 
 // Track the last time event fired:
-unsigned long previousSeconds = 0;
+//unsigned long previousSeconds = 0;
 
 // :::::::::: RTC SETUP ::::::::::
 bool newSecondFireFlag = false;                   // rtc new second fire flag
@@ -144,6 +152,14 @@ void setup() {
   //Serial.print("Local port: ");
   //Serial.println(localPort);
   //Serial.println("waiting for sync");
+  if (getNtpTime() == 0) {
+    Serial.println("Communication with NTP server failed!");
+    lcdNtpSyncError();
+    setSyncProvider(getNtpTime);
+    setSyncInterval(1);
+    // don't continue
+    while (true);
+  }
   setSyncProvider(getNtpTime);
   setSyncInterval(300);
   
@@ -154,20 +170,17 @@ void setup() {
 
   // :::::::::: INIT THE PUMP RELAY ::::::::::
   pinMode(pumpRelayPin, OUTPUT);
-  digitalWrite(pumpRelayPin, pumpRelayState);
+  turnPumpOff();
 
   // :::::::::: INIT THE VALVE RELAY ::::::::::
   pinMode(valveRelayPin, OUTPUT);
-  digitalWrite(valveRelayPin, valveRelayState); 
+  turnValveOff();
 
 }
 
 
 
-void loop() {
-  // :::::::::: SHOW CLOCK ON SERIAL CONSOLE ::::::::::
-  //serialShowClock();
-    
+void loop() { 
   // :::::::::: WEB SERVER ::::::::::
   // Serial to Server:
   WiFiClient client = server.available();
@@ -206,83 +219,80 @@ void loop() {
     //Serial.println("Client disconnected");
   }
 
+  // :::::::::: SHOW CLOCK ON SERIAL CONSOLE ::::::::::
+  if( newSecondFireFlag ) {                       // make actions if flag is fired:
+    newSecondFireFlag = false;                    // unfire flag
+    unsigned long actualTime = now();             // get actual system timestamp
+
+    // Display current system date and time:
+    //Serial.print(year(actualTime));
+    //Serial.print("-");
+    //Serial.print(month(actualTime));
+    //Serial.print("-");
+    //Serial.print(day(actualTime));
+    //Serial.print(" ");
+    Serial.print(hour(actualTime));
+    Serial.print(":");
+    Serial.print(minute(actualTime));
+    Serial.print(":");
+    Serial.println(second(actualTime));
+
+    // Display current milliseconds:
+    //Serial.println(now());
+
   // :::::::::: IRRIGATION TANK CONTROL ::::::::::
-  // Distance readout:
-  int dist = sonar();
+    // Distance readout:
+    lastSonarReading = sonar();
 
-  // Change the desired distances in cm:
-  if (dist > 200 || dist <= 0) {
-    pumpRelayState = HIGH;
-    valveRelayState = HIGH;
-    //serialOutOfRange();
-    lcdOutOfRange();
-    digitalWrite(pumpRelayPin, pumpRelayState);
-    digitalWrite(valveRelayPin, valveRelayState);
-  }
+    // Change the desired distances in cm:
+    if (lastSonarReading > 400 || lastSonarReading <= 0) {
+      state = "oor";
+      turnPumpOff();
+      turnValveOff();
+      serialTankState();
+      lcdTankState();
+    }
 
-  else if (dist < 15) {
-    pumpRelayState = HIGH;
-    valveRelayState = HIGH;
-    //serialTankFull();
-    lcdTankFull();
-    digitalWrite(pumpRelayPin, pumpRelayState);
-    digitalWrite(valveRelayPin, valveRelayState);
- }
-
-  else {
-    // :::::::::: PUMP CONTROL ::::::::::
-    // Snapshot of current time:
-    unsigned long currentSeconds = now();
-    
-    if (pumpRelayState == HIGH) {
-      //serialPumpWaiting();
-      lcdPumpWaiting();
-      if ((unsigned long)(currentSeconds - previousSeconds) >= pumpOffDuration) {
-        pumpRelayState = LOW;
-        previousSeconds = currentSeconds;
-        }
-        
+    else if (lastSonarReading < 15) {
+      state = "full";
+      turnPumpOff();
+      turnValveOff();
+      serialTankState();
+      lcdTankState();
     }
 
     else {
-      //serialPumpFilling();
-      lcdPumpFilling();
-      if ((unsigned long)(currentSeconds - previousSeconds) >= pumpOnDuration) {
-        pumpRelayState = HIGH;
-        previousSeconds = currentSeconds;
-        
+      state = "filling";
+      int currentHour = minute(actualTime);
+      int currentMinute = second(actualTime);
+      
+      // :::::::::: PUMP CONTROL ::::::::::
+      if (currentHour % 2 == 0 && (currentMinute >= 50 && currentMinute <= 59)) {
+        turnPumpOn();
       }
 
-    digitalWrite(pumpRelayPin, pumpRelayState);
+      else {
+        turnPumpOff();
+        //lcdIdle();
+      }
 
+      // :::::::::: VALVE CONTROL ::::::::::
+      
+
+      if ((currentMinute >= 10 && currentMinute <= 20) || (currentMinute >= 30 && currentMinute <= 40)) {           // 5; 7; 21; 23
+        turnValveOn();
+      }
+
+      else {
+        turnValveOff();
+        //lcdIdle();
+      }
+
+      serialTankState();
+      lcdTankState();
+      
     }
-
-    int currentHour = hour(now());
-    // :::::::::: VALVE CONTROL ::::::::::
-    if (currentHour >= 5 && currentHour < 8) {           // Morning: 5 - 7
-      valveRelayState = LOW;
-      //serialValveFilling();
-      lcdValveFilling();
-      //digitalWrite(valveRelayPin, valveRelayState);
-    }
-
-    else if (currentHour >= 21 && currentHour < 23) {     // Evening: 21 - 23
-      valveRelayState = LOW;
-      //serialValveFilling();
-      lcdValveFilling();
-      //digitalWrite(valveRelayPin, valveRelayState);
-    }
-
-    else {
-      valveRelayState = HIGH;
-      //serialValveWaiting();
-      lcdValveWaiting();
-    }
-    
-    digitalWrite(valveRelayPin, valveRelayState);
-
   }
-
 }
 
 
@@ -343,49 +353,75 @@ void lcdNetStatusWiFiModuleFirmware() {
   lcd.blink();
 }
 
-void lcdOutOfRange() { 
-  lcd.setRGB(255,0,0);
-  lcd.setCursor(0,0);
-  lcd.print(F(" OUT OF RANGE!!!"));
-  lcd.setCursor(0,1);
-  lcd.print(F("|P:OFF|  |V:OFF|"));
-}
-
-void lcdTankFull() {
-  lcd.setRGB(255,0,0);
-  lcd.setCursor(0,0);
-  lcd.print(sonar());
-  lcd.println(F("cm: TANK FULL!!!"));
-  lcd.setCursor(0,1);
-  lcd.print(F("|P:OFF|  |V:OFF|"));
-}
-
-void lcdPumpFilling() {
+void lcdNtpSyncError() {
+  lcd.stopBlink();
+  lcd.clear();
   lcd.setRGB(0,255,0);
   lcd.setCursor(0,0);
-  lcd.print(sonar());
-  lcd.println(F("cm: FILLING..."));
+  lcd.print(F("NTP SYNC FAILED!"));
   lcd.setCursor(0,1);
-  lcd.print(F("|P: ON| "));
+  lcd.print("    RETRYING    ");
+  delay(5000);
+  lcd.clear();
 }
 
-void lcdValveFilling() {
-  lcd.setRGB(0,255,0);
+void lcdTankState() {
+  if (state == "filling") {
+    if (pumpOnFlag) {
+      lcd.setRGB(0,255,0);
+      lcd.setCursor(0,0);
+      lcd.print(lastSonarReading);
+      lcd.println(F("cm: FILLING..."));
+      lcd.setCursor(0,1);
+      lcd.print(F("|P: ON| "));
+    }
+
+    else {
+      lcd.setCursor(0,1);
+      lcd.print(F("|P:WAIT|"));
+    }
+
+    if (valveOnFlag) {
+      lcd.setRGB(0,255,0);
+      lcd.setCursor(0,0);
+      lcd.print(lastSonarReading);
+      lcd.println(F("cm: FILLING..."));
+      lcd.setCursor(8,1);
+      lcd.print(F(" |V: ON|"));
+    }
+
+    else {
+      lcd.setCursor(8,1);
+      lcd.print(F("|V:WAIT|"));
+    }
+  }
+
+  else if (state == "full") {
+    lcd.setRGB(255,0,0);
+    lcd.setCursor(0,0);
+    lcd.print(lastSonarReading);
+    lcd.println(F("cm: TANK FULL!!!"));
+    lcd.setCursor(0,1);
+    lcd.print(F("|P:OFF|  |V:OFF|"));
+  }
+
+  else if (state == "oor") {
+    lcd.setRGB(255,0,0);
+    lcd.setCursor(0,0);
+    lcd.print(F(" OUT OF RANGE!!!"));
+    lcd.setCursor(0,1);
+    lcd.print(F("|P:OFF|  |V:OFF|"));
+  }
+
+}
+
+void lcdIdle() {
+  lcd.setRGB(255,255,0);
   lcd.setCursor(0,0);
-  lcd.print(sonar());
-  lcd.println(F("cm: FILLING..."));
-  lcd.setCursor(8,1);
-  lcd.print(F(" |V: ON|"));
-}
-
-void lcdPumpWaiting() { 
+  lcd.print(F("  SYSTEM IDLE:  "));
   lcd.setCursor(0,1);
-  lcd.print(F("|P:WAIT|"));
-}
-
-void lcdValveWaiting() { 
-  lcd.setCursor(8,1);
-  lcd.print(F("|V:WAIT|"));
+  lcd.print(F("                "));
+  lcd.blink();
 }
 
 // :::::::::: RTC FUNCTIONS ::::::::::
@@ -477,7 +513,43 @@ int sonar() {
   return distance;
 }
 
+// :::::::::: RELAY FUNCTIONS ::::::::::
+// Pump :
+void turnPumpOn() {
+  pumpRelayState = digitalRead(pumpRelayPin);     // read current pump state
+  if (pumpRelayState == HIGH) {                   // if pump is off
+    digitalWrite(pumpRelayPin, LOW);              // turn pump on
+    pumpOnFlag = true;
+  }
+}
+
+void turnPumpOff() {
+  pumpRelayState = digitalRead(pumpRelayPin);     // read current pump state
+  if (pumpRelayState == LOW) {                    // if pump is on
+    digitalWrite(pumpRelayPin, HIGH);             // turn pump off
+    pumpOnFlag = false;
+  }
+}
+
+// Valve relay:
+void turnValveOn() {
+  valveRelayState = digitalRead(valveRelayPin);   // read current valve state
+  if (valveRelayState == HIGH) {                  // if valve is off
+    digitalWrite(valveRelayPin, LOW);             // turn valve on
+    valveOnFlag = true;
+  }
+}
+
+void turnValveOff() {
+  valveRelayState = digitalRead(valveRelayPin);   // read current valve state
+  if (valveRelayState == LOW) {                   // if valve is on
+    digitalWrite(valveRelayPin, HIGH);            // turn valve off
+    valveOnFlag = false;
+  }
+}
+
 // :::::::::: SERVER FUNCTIONS ::::::::::
+// Setup web page:
 void showWebPage(WiFiClient client) {
   // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
   // and a content-type so the client knows what's coming, then a blank line:
@@ -492,9 +564,9 @@ void showWebPage(WiFiClient client) {
   //client.println("<meta http-equiv='refresh' content='10'>");
   client.println("</head>");
   client.println("<body style='background-color:LightGrey;'>");
-  client.println("<h1>IRRIGATION TANK REMOTE CONTROL</h1>");
+  client.println("<h1>IRRIGATION TANK PUMP/VALVE STATUS</h1>");
   client.println("<table border=1 style='text-align:center'>");
-  client.println("<tr><th>Component</th><th>Status</th><th>Control</th></tr>");
+  client.println("<tr><th>Component</th><th>Status</th></tr>");
 
   // PUMP relay:
   client.print("<tr><td>PUMP</td><td>");
@@ -503,7 +575,7 @@ void showWebPage(WiFiClient client) {
   } else {
     client.print("<font style='color:green;'>ON</font>");
   }
-  client.println("</td><td><a href='/pump_relay/on'>ON</a> / <a href='/pump_relay/off'>OFF</a></td></tr>");
+  //client.println("</td><td><a href='/pump_relay/on'>ON</a> / <a href='/pump_relay/off'>OFF</a></td></tr>");
 
   // VALVE relay:
   client.print("<tr><td>VALVE</td><td>");
@@ -512,27 +584,25 @@ void showWebPage(WiFiClient client) {
   } else {
     client.print("<font style='color:green;'>ON</font>");
   }
-  client.println("</td><td><a href='/valve_relay/on'>ON</a> / <a href='/valve_relay/off'>OFF</a></td></tr>");
+  //client.println("</td><td><a href='/valve_relay/on'>ON</a> / <a href='/valve_relay/off'>OFF</a></td></tr>");
 
   client.println("</table>");
 
-  // Level meter:
-  int level = sonar();
-
+  // TANK LEVEL:
   client.println("<h1>IRRIGATION TANK CURRENT LEVEL</h1>");
   client.println("<table border=1 style='text-align:center'>");
   client.println("<tr><th>Tank</th><th>Level</th></tr>");
 
   client.print("<tr><td>IRRIGATION TANK</td><td>");
   client.print("<font style='color:black;'>");
-  client.print(level);
+  client.print(lastSonarReading);
   client.print("</font><font style='color:black;>'>cm</font>");
   client.println("</table>");
   
   // The HTTP response ends with another blank line:
   client.println();
 }
-
+/* Setup headers:
 void performRequest(String line) {
   if (line.endsWith("GET /pump_relay/on")) {
     digitalWrite(pumpRelayPin, LOW);
@@ -550,8 +620,9 @@ void performRequest(String line) {
     digitalWrite(valveRelayPin, HIGH);
   }
 }
+*/
 
-/* :::::::::: SERIAL CONSOLE FUNCTIONS (DEBUGGING ONLY) ::::::::::
+// :::::::::: SERIAL CONSOLE FUNCTIONS (DEBUGGING ONLY) ::::::::::
 // Wifi serial console functions:
 void serialPrintWifiData() {
   // Print your board's IP address:
@@ -559,72 +630,47 @@ void serialPrintWifiData() {
   Serial.print("IP Address: ");
   Serial.println(ip);
 }
-
 void serialPrintCurrentNet() {
   // Print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
-
   // Print the received signal strength:
   long rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI):");
   Serial.println(rssi);
 }
-
-// Show clock:
-void serialShowClock() {
-  if( newSecondFireFlag ) {                       // make actions if flag is fired:
-
-    newSecondFireFlag = false;                    // unfire flag
-
-    unsigned long actualTime = now();             // get actual system timestamp
-
-    // display current system date and time:
-    Serial.print(year(actualTime));
-    Serial.print("-");
-    Serial.print(month(actualTime));
-    Serial.print("-");
-    Serial.print(day(actualTime));
-    Serial.print(" ");
-    Serial.print(hour(actualTime));
-    Serial.print(":");
-    Serial.print(minute(actualTime));
-    Serial.print(":");
-    Serial.println(second(actualTime));
-  }
-}
-
 // Sonar serial console functions:
-void serialOutOfRange() {
-  Serial.print(sonar());
-  Serial.println("cm: OUT OF RANGE!!!");
-  Serial.println("|P:OFF|  |V:OFF|");
-}
+void serialTankState() {
+  if (state == "filling") {
+    Serial.print(lastSonarReading);
+    Serial.println("cm: FILLING...");
+    if (pumpOnFlag) {
+      Serial.print("|P: ON|  ");
+    }
 
-void serialTankFull() {
-  Serial.print(sonar());
-  Serial.println("cm: TANK FULL!!!");
-  Serial.println("|P:OFF|  |V:OFF|");
-}
+    else {
+      Serial.print("|P: WAIT|  ");
+    }
 
-void serialPumpFilling() {
-  Serial.print(sonar());
-  Serial.println("cm: FILLING...");
-  Serial.println("PUMP: ON");
-}
+    if (valveOnFlag) {
+      Serial.println("|V: ON|");
+    }
 
-void serialValveFilling() {
-  Serial.print(sonar());
-  Serial.println("cm: FILLING...");
-  Serial.println("VALVE: ON");
-}
+    else {
+      Serial.println("|V: WAIT|");
+    }
+  }
 
-// PUMP/VALVE WAITING serial console functions:
-void serialPumpWaiting() {
-  Serial.println("PUMP: WAITING...");
-}
+  else if (state == "full") {
+    Serial.print(lastSonarReading);
+    Serial.println("cm: TANK FULL");
+    Serial.println("|P: OFF|  |V: OFF|");
+  }
 
-void serialValveWaiting() {
-  Serial.println("VALVE: WAITING...");
+  else if (state == "oor") {
+    Serial.print(lastSonarReading);
+    Serial.println("cm: OUT OF RANGE");
+    Serial.println("|P: OFF|  |V: OFF|");
+  }
+
 }
-*/
