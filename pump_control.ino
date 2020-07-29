@@ -51,14 +51,6 @@ const int valveRelayPin = 10;
 int valveRelayState = HIGH;
 boolean valveOnFlag = false;
 
-// :::::::::: PUMP TIMIER SETUP ::::::::::
-// On and Off durations:
-//const unsigned long pumpOnDuration = 10;         // set seconds of on-time 120
-//const unsigned long pumpOffDuration = 20;       // set seconds of off-time 3600 || 7200
-
-// Track the last time event fired:
-//unsigned long previousSeconds = 0;
-
 // :::::::::: RTC SETUP ::::::::::
 bool newSecondFireFlag = false;                   // rtc new second fire flag
 unsigned long pitCounter = 0;                     // pit counter
@@ -80,8 +72,7 @@ unsigned int localPort = 8888;                    // local port to listen for UD
 time_t getNtpTime();
 void sendNTPpacket(IPAddress &address);
 
-// :::::::::: CLOCK SETUP ::::::::::
-time_t clock = now();                             // store the current time in time variable clock
+unsigned long actualTime = now();             // get actual system timestamp
 
 
 
@@ -152,14 +143,14 @@ void setup() {
   //Serial.print("Local port: ");
   //Serial.println(localPort);
   //Serial.println("waiting for sync");
-  if (getNtpTime() == 0) {
-    Serial.println("Communication with NTP server failed!");
-    lcdNtpSyncError();
-    setSyncProvider(getNtpTime);
-    setSyncInterval(1);
+  //if (getNtpTime() == 0) {
+    //Serial.println("Communication with NTP server failed!");
+    //lcdNtpSyncError();
+    //setSyncProvider(getNtpTime);
+    //setSyncInterval(1);
     // don't continue
-    while (true);
-  }
+    //while (true);
+  //}
   setSyncProvider(getNtpTime);
   setSyncInterval(300);
   
@@ -222,7 +213,7 @@ void loop() {
   // :::::::::: SHOW CLOCK ON SERIAL CONSOLE ::::::::::
   if( newSecondFireFlag ) {                       // make actions if flag is fired:
     newSecondFireFlag = false;                    // unfire flag
-    unsigned long actualTime = now();             // get actual system timestamp
+    actualTime = now();                           // get actual system timestamp
 
     // Display current system date and time:
     //Serial.print(year(actualTime));
@@ -231,11 +222,11 @@ void loop() {
     //Serial.print("-");
     //Serial.print(day(actualTime));
     //Serial.print(" ");
-    Serial.print(hour(actualTime));
-    Serial.print(":");
-    Serial.print(minute(actualTime));
-    Serial.print(":");
-    Serial.println(second(actualTime));
+    //Serial.print(hour(actualTime));
+    //Serial.print(":");
+    //Serial.print(minute(actualTime));
+    //Serial.print(":");
+    //Serial.println(second(actualTime));
 
     // Display current milliseconds:
     //Serial.println(now());
@@ -249,7 +240,7 @@ void loop() {
       state = "oor";
       turnPumpOff();
       turnValveOff();
-      serialTankState();
+      //serialTankState();
       lcdTankState();
     }
 
@@ -257,38 +248,38 @@ void loop() {
       state = "full";
       turnPumpOff();
       turnValveOff();
-      serialTankState();
+      //serialTankState();
       lcdTankState();
     }
 
     else {
       state = "filling";
-      int currentHour = minute(actualTime);
-      int currentMinute = second(actualTime);
+      int currentHour = hour(actualTime);
+      int currentMinute = minute(actualTime);
       
       // :::::::::: PUMP CONTROL ::::::::::
-      if (currentHour % 2 == 0 && (currentMinute >= 50 && currentMinute <= 59)) {
+      if (currentHour % 2 == 0 && (currentMinute >= 0 && currentMinute < 2)) {
         turnPumpOn();
       }
 
       else {
         turnPumpOff();
-        //lcdIdle();
+        lcdWaiting();
       }
 
       // :::::::::: VALVE CONTROL ::::::::::
       
 
-      if ((currentMinute >= 10 && currentMinute <= 20) || (currentMinute >= 30 && currentMinute <= 40)) {           // 5; 7; 21; 23
+      if ((currentHour >= 5 && currentHour <= 7) || (currentHour >= 21 && currentHour <= 23)) {           // 5; 7; 21; 23
         turnValveOn();
       }
 
       else {
         turnValveOff();
-        //lcdIdle();
+        lcdWaiting();
       }
 
-      serialTankState();
+      //serialTankState();
       lcdTankState();
       
     }
@@ -415,13 +406,12 @@ void lcdTankState() {
 
 }
 
-void lcdIdle() {
-  lcd.setRGB(255,255,0);
-  lcd.setCursor(0,0);
-  lcd.print(F("  SYSTEM IDLE:  "));
-  lcd.setCursor(0,1);
-  lcd.print(F("                "));
-  lcd.blink();
+void lcdWaiting() {
+  if (!pumpOnFlag && !valveOnFlag) {
+    lcd.setRGB(255,255,0);
+    lcd.setCursor(0,0);
+    lcd.print(F("  SYSTEM IDLE:  "));
+  }
 }
 
 // :::::::::: RTC FUNCTIONS ::::::::::
@@ -537,6 +527,7 @@ void turnValveOn() {
   if (valveRelayState == HIGH) {                  // if valve is off
     digitalWrite(valveRelayPin, LOW);             // turn valve on
     valveOnFlag = true;
+    
   }
 }
 
@@ -598,6 +589,15 @@ void showWebPage(WiFiClient client) {
   client.print(lastSonarReading);
   client.print("</font><font style='color:black;>'>cm</font>");
   client.println("</table>");
+
+  client.println("<h1>CURRENT TIME:</h1>");
+  client.print("<font style='font-size:60px;color:black;'>");
+  client.print(hour(actualTime));
+  client.print(":");
+  client.print(minute(actualTime));
+  client.print(":");
+  client.println(second(actualTime));
+  client.print("</font>");
   
   // The HTTP response ends with another blank line:
   client.println();
@@ -622,7 +622,7 @@ void performRequest(String line) {
 }
 */
 
-// :::::::::: SERIAL CONSOLE FUNCTIONS (DEBUGGING ONLY) ::::::::::
+/* :::::::::: SERIAL CONSOLE FUNCTIONS (DEBUGGING ONLY) ::::::::::
 // Wifi serial console functions:
 void serialPrintWifiData() {
   // Print your board's IP address:
@@ -674,3 +674,4 @@ void serialTankState() {
   }
 
 }
+*/
